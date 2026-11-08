@@ -34,4 +34,4 @@ jobs:
         env:
           VSCODE_TEST_VERSION: ${{ matrix.vscode }}
       - name: Package
-        run: npx --yes @vscode/vsce package --skip-license --allow-missing-repository
+        run: npx --yes @vscode/vsce package

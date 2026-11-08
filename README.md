@@ -1,12 +1,14 @@
-# Mindmap Markdown (`mindmap-vsc`)
+# mind.md
 
 Edit the headings of a Markdown file as a mind map, in VS Code. Your text stays where it is: changing a node rewrites only that heading, and everything else in the file keeps its exact bytes.
+
+![A mind map of a Markdown file, with the toolbar of the selected node](media/screenshot.png)
 
 ## Open a map
 
 Markdown files open as text as usual. The map is there when you ask for it:
 
-- **Beside the text:** click the hierarchy icon at the top right of a `.md` editor, or press `Cmd+Alt+M` on macOS or `Ctrl+Alt+M` on Windows and Linux.
+- **Beside the text:** click the hierarchy icon at the top right of a `.md` editor, or press `Cmd+Shift+Alt+M` on macOS or `Ctrl+Shift+Alt+M` on Windows and Linux.
 - **Instead of the text:** right-click a `.md` file, select **Open With...**, then **Mindmap Editor**.
 
 Each document gets one side panel, which closes when you close the document.
@@ -59,4 +61,4 @@ npm test                  # unit and property tests
 npm run test:integration  # runs in a real VS Code, downloaded on first use
 ```
 
-To try it, press `F5` to start the Extension Development Host, open a `.md` file and press `Cmd+Alt+M`.
+To try it, press `F5` to start the Extension Development Host, open a `.md` file and press `Cmd+Shift+Alt+M`.

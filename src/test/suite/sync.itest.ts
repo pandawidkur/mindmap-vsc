@@ -24,7 +24,7 @@ async function waitFor<T>(read: () => T | undefined | false, what: string): Prom
 }
 
 function api(): Promise<ExtensionApi> {
-  const extension = vscode.extensions.all.find((e) => e.packageJSON.name === 'mindmap-vsc')!;
+  const extension = vscode.extensions.all.find((e) => e.packageJSON.name === 'mind-md')!;
   return extension.activate() as Promise<ExtensionApi>;
 }
 
