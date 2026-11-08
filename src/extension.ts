@@ -1,203 +1,203 @@
-import * as vscode from 'vscode';
+import { randomBytes } from 'crypto';
 import * as path from 'path';
-import * as fs from 'fs';
-import { markdownToTree, treeToMarkdown, MindmapData } from './parser/headingTree';
+import * as vscode from 'vscode';
+import { HistoryAction } from './shared/protocol';
+import { SyncSession } from './sync/SyncSession';
 
-export function activate(context: vscode.ExtensionContext) {
-  // Command: Open Mindmap Beside (Automatic Split)
-  const openSplitCommand = vscode.commands.registerCommand(
-    'mindmap.openSplit',
-    async () => {
-      const activeEditor = vscode.window.activeTextEditor;
-      if (!activeEditor || !isMarkdownDocument(activeEditor.document)) {
-        vscode.window.showWarningMessage(
-          'Please open an active Markdown (.md) document first.'
-        );
-        return;
+type ViewMode = 'panel' | 'editor';
+
+/** Exported for the integration tests, which stand in for the webview. */
+export interface ExtensionApi {
+  sessionFor(uri: vscode.Uri): SyncSession | undefined;
+}
+
+export function activate(context: vscode.ExtensionContext): ExtensionApi {
+  const sessions = new Map<string, SyncSession>();
+  const panels = new Map<string, vscode.WebviewPanel>();
+
+  const attach = (panel: vscode.WebviewPanel, document: vscode.TextDocument, mode: ViewMode) => {
+    const key = document.uri.toString();
+    const session = connectSession(panel, document, mode);
+    sessions.set(key, session);
+    panel.onDidDispose(() => {
+      if (sessions.get(key) === session) {
+        sessions.delete(key);
       }
+    });
+    panel.webview.options = webviewOptions(context.extensionUri);
+    panel.webview.html = renderHtml(panel.webview, context.extensionUri, mode);
+  };
 
-      const document = activeEditor.document;
-      const fileName = path.basename(document.fileName);
-
-      const panel = vscode.window.createWebviewPanel(
-        'mindmapBeside',
-        `Mindmap: ${fileName}`,
-        vscode.ViewColumn.Beside,
-        {
-          enableScripts: true,
-          retainContextWhenHidden: true,
-          localResourceRoots: [
-            vscode.Uri.file(path.join(context.extensionPath, 'dist')),
-          ],
-        }
-      );
-
-      panel.webview.html = getWebviewContent(
-        panel.webview,
-        context.extensionUri
-      );
-
-      setupSyncBridge(panel, document, context);
+  const openBeside = vscode.commands.registerCommand('mindmap.openSplit', () => {
+    const document = vscode.window.activeTextEditor?.document;
+    if (!document || !isMarkdownDocument(document)) {
+      void vscode.window.showWarningMessage('Please open an active Markdown (.md) document first.');
+      return;
     }
-  );
 
-  // Register Custom Text Editor Provider ("Open With -> Mindmap Editor")
-  const customEditorProvider = vscode.window.registerCustomEditorProvider(
+    const key = document.uri.toString();
+    const existing = panels.get(key);
+    if (existing) {
+      existing.reveal();
+      return;
+    }
+
+    const panel = vscode.window.createWebviewPanel(
+      'mindmapBeside',
+      `Mindmap: ${path.basename(document.fileName)}`,
+      vscode.ViewColumn.Beside,
+      { ...webviewOptions(context.extensionUri), retainContextWhenHidden: true }
+    );
+    panels.set(key, panel);
+    const closeWithDocument = vscode.window.tabGroups.onDidChangeTabs(() => {
+      if (!findTabGroup(document.uri)) {
+        panel.dispose();
+      }
+    });
+    panel.onDidDispose(() => {
+      panels.delete(key);
+      closeWithDocument.dispose();
+    });
+    attach(panel, document, 'panel');
+  });
+
+  const customEditor = vscode.window.registerCustomEditorProvider(
     'mindmap.editor',
-    new MindmapCustomEditorProvider(context),
     {
-      webviewOptions: {
-        retainContextWhenHidden: true,
+      resolveCustomTextEditor(document, panel) {
+        attach(panel, document, 'editor');
       },
+    },
+    {
+      webviewOptions: { retainContextWhenHidden: true },
       supportsMultipleEditorsPerDocument: true,
     }
   );
 
-  context.subscriptions.push(openSplitCommand, customEditorProvider);
+  context.subscriptions.push(openBeside, customEditor);
+  return { sessionFor: (uri) => sessions.get(uri.toString()) };
 }
 
 function isMarkdownDocument(document: vscode.TextDocument): boolean {
-  return (
-    document.languageId === 'markdown' ||
-    document.fileName.endsWith('.md') ||
-    document.fileName.endsWith('.markdown')
+  return document.languageId === 'markdown' || /\.(md|markdown)$/i.test(document.fileName);
+}
+
+function webviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
+  return {
+    enableScripts: true,
+    localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist')],
+  };
+}
+
+function findTabGroup(uri: vscode.Uri): vscode.TabGroup | undefined {
+  return vscode.window.tabGroups.all.find((group) =>
+    group.tabs.some(
+      (tab) =>
+        tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === uri.toString()
+    )
   );
 }
 
-class MindmapCustomEditorProvider implements vscode.CustomTextEditorProvider {
-  constructor(private readonly context: vscode.ExtensionContext) {}
-
-  public async resolveCustomTextEditor(
-    document: vscode.TextDocument,
-    webviewPanel: vscode.WebviewPanel
-  ): Promise<void> {
-    webviewPanel.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.file(path.join(this.context.extensionPath, 'dist')),
-      ],
-    };
-
-    webviewPanel.webview.html = getWebviewContent(
-      webviewPanel.webview,
-      this.context.extensionUri
-    );
-
-    setupSyncBridge(webviewPanel, document, this.context);
-  }
+/** Undo commands act on the focused editor, so the document is focused for the call. */
+async function runHistoryOnDocument(
+  action: HistoryAction,
+  document: vscode.TextDocument,
+  panel: vscode.WebviewPanel
+): Promise<void> {
+  await vscode.window.showTextDocument(document, {
+    viewColumn: findTabGroup(document.uri)?.viewColumn ?? vscode.ViewColumn.Beside,
+    preserveFocus: false,
+    preview: false,
+  });
+  await vscode.commands.executeCommand(action);
+  panel.reveal(panel.viewColumn, false);
 }
 
-function setupSyncBridge(
+function connectSession(
   panel: vscode.WebviewPanel,
   document: vscode.TextDocument,
-  context: vscode.ExtensionContext
-) {
-  let isUpdatingFromWebview = false;
-  let debounceTimer: NodeJS.Timeout | null = null;
-  const defaultTitle = path.basename(
-    document.fileName,
-    path.extname(document.fileName)
-  ) || 'Mindmap';
-
-  // Listen to messages from Webview
-  const messageSubscription = panel.webview.onDidReceiveMessage(
-    async (message) => {
-      if (!message) {
-        return;
-      }
-
-      if (message.type === 'ready') {
-        const text = document.getText();
-        const treeData = markdownToTree(text, { defaultTitle });
-        panel.webview.postMessage({ type: 'init', data: treeData });
-      } else if (message.type === 'mindmapChanged') {
-        const treeData = message.data as MindmapData;
-        const newMarkdown = treeToMarkdown(treeData);
-
-        if (newMarkdown.trim() !== document.getText().trim()) {
-          isUpdatingFromWebview = true;
-          try {
-            const edit = new vscode.WorkspaceEdit();
-            const fullRange = new vscode.Range(
-              document.positionAt(0),
-              document.positionAt(document.getText().length)
-            );
-            edit.replace(document.uri, fullRange, newMarkdown);
-            await vscode.workspace.applyEdit(edit);
-          } finally {
-            setTimeout(() => {
-              isUpdatingFromWebview = false;
-            }, 100);
-          }
-        }
-      }
-    }
+  mode: ViewMode
+): SyncSession {
+  const title = path.basename(document.fileName, path.extname(document.fileName)) || 'Mindmap';
+  const session = new SyncSession(
+    {
+      document: {
+        get version() {
+          return document.version;
+        },
+        getText: () => document.getText(),
+        applyChange(change) {
+          const edit = new vscode.WorkspaceEdit();
+          edit.replace(
+            document.uri,
+            new vscode.Range(document.positionAt(change.start), document.positionAt(change.end)),
+            change.text
+          );
+          return Promise.resolve(vscode.workspace.applyEdit(edit));
+        },
+      },
+      view: {
+        post: (message) => void panel.webview.postMessage(message),
+      },
+      user: {
+        async confirmRemoval(sections) {
+          const action = 'Delete';
+          const noun = sections === 1 ? 'section that contains' : 'sections that contain';
+          const choice = await vscode.window.showWarningMessage(
+            `Delete ${sections} ${noun} text?`,
+            { modal: true, detail: 'You can bring it back with Undo.' },
+            action
+          );
+          return choice === action;
+        },
+        warn: (message) => void vscode.window.showWarningMessage(message),
+      },
+      history:
+        mode === 'panel' ? (action) => runHistoryOnDocument(action, document, panel) : undefined,
+    },
+    title
   );
 
-  // Listen to edits in the VS Code Markdown document
-  const docSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
-    if (event.document.uri.toString() !== document.uri.toString()) {
-      return;
+  const messages = panel.webview.onDidReceiveMessage((message) => session.handleMessage(message));
+  const changes = vscode.workspace.onDidChangeTextDocument((event) => {
+    if (event.document.uri.toString() === document.uri.toString()) {
+      session.documentChanged();
     }
-    if (isUpdatingFromWebview) {
-      return;
-    }
-
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-    }
-    debounceTimer = setTimeout(() => {
-      const text = document.getText();
-      const treeData = markdownToTree(text, { defaultTitle });
-      panel.webview.postMessage({ type: 'update', data: treeData });
-    }, 200);
   });
-
   panel.onDidDispose(() => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-    }
-    messageSubscription.dispose();
-    docSubscription.dispose();
+    session.dispose();
+    messages.dispose();
+    changes.dispose();
   });
+  return session;
 }
 
-function getWebviewContent(
-  webview: vscode.Webview,
-  extensionUri: vscode.Uri
-): string {
-  const scriptUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, 'dist', 'webview.js')
-  );
-  const styleUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, 'dist', 'style.css')
-  );
-
-  const nonce = getNonce();
+function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, mode: ViewMode): string {
+  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview.js'));
+  const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'style.css'));
+  const nonce = randomBytes(16).toString('base64');
+  // The map library injects its stylesheet and positions nodes with inline styles.
+  const csp = [
+    "default-src 'none'",
+    `style-src ${webview.cspSource} 'unsafe-inline'`,
+    `script-src 'nonce-${nonce}'`,
+    `img-src ${webview.cspSource} data:`,
+  ].join('; ');
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:;">
+  <meta http-equiv="Content-Security-Policy" content="${csp}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="${styleUri}">
   <title>Mindmap</title>
 </head>
-<body>
+<body data-mode="${mode}">
   <div id="map"></div>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
-}
-
-function getNonce(): string {
-  let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
 }
 
 export function deactivate() {}
