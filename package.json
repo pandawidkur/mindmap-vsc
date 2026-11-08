@@ -13,6 +13,7 @@
     "Notebooks"
   ],
   "activationEvents": [
+    "onLanguage:markdown",
     "onCommand:mindmap.openSplit",
     "onCustomEditor:mindmap.editor"
   ],

@@ -28,7 +28,6 @@ export function activate(context: vscode.ExtensionContext) {
           retainContextWhenHidden: true,
           localResourceRoots: [
             vscode.Uri.file(path.join(context.extensionPath, 'dist')),
-            vscode.Uri.file(path.join(context.extensionPath, 'src', 'webview')),
           ],
         }
       );
@@ -76,7 +75,6 @@ class MindmapCustomEditorProvider implements vscode.CustomTextEditorProvider {
       enableScripts: true,
       localResourceRoots: [
         vscode.Uri.file(path.join(this.context.extensionPath, 'dist')),
-        vscode.Uri.file(path.join(this.context.extensionPath, 'src', 'webview')),
       ],
     };
 
@@ -172,7 +170,7 @@ function getWebviewContent(
     vscode.Uri.joinPath(extensionUri, 'dist', 'webview.js')
   );
   const styleUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, 'src', 'webview', 'style.css')
+    vscode.Uri.joinPath(extensionUri, 'dist', 'style.css')
   );
 
   const nonce = getNonce();
