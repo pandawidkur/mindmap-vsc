@@ -1,0 +1,43 @@
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--vscode-editor-background, #1e1e1e);
+  color: var(--vscode-editor-foreground, #cccccc);
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.map-container {
+  background-color: var(--vscode-editor-background, #1e1e1e) !important;
+}
+
+/* Adaptive theme adjustments */
+body.vscode-dark {
+  --main-color: var(--vscode-editor-foreground, #ffffff);
+  --main-bgcolor: var(--vscode-editorWidget-background, #252526);
+  --color: var(--vscode-editor-foreground, #cccccc);
+  --bgcolor: var(--vscode-editor-background, #1e1e1e);
+  --selected: var(--vscode-focusBorder, #007fd4);
+  --root-color: var(--vscode-editor-foreground, #ffffff);
+  --root-bgcolor: var(--vscode-button-background, #0e639c);
+}
+
+body.vscode-light {
+  --main-color: var(--vscode-editor-foreground, #1e1e1e);
+  --main-bgcolor: var(--vscode-editorWidget-background, #f3f3f3);
+  --color: var(--vscode-editor-foreground, #333333);
+  --bgcolor: var(--vscode-editor-background, #ffffff);
+  --selected: var(--vscode-focusBorder, #007acc);
+  --root-color: #ffffff;
+  --root-bgcolor: var(--vscode-button-background, #007acc);
+}

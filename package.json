@@ -1,0 +1,76 @@
+{
+  "name": "mindmap-vsc",
+  "displayName": "Mindmap Markdown",
+  "description": "Visual mindmap editor with real-time bidirectional Markdown heading synchronization.",
+  "version": "0.1.0",
+  "publisher": "dawid",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization",
+    "Notebooks"
+  ],
+  "activationEvents": [
+    "onCommand:mindmap.openSplit",
+    "onCustomEditor:mindmap.editor"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mindmap.openSplit",
+        "title": "Open Mindmap Beside",
+        "icon": "$(type-hierarchy)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "command": "mindmap.openSplit",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "mindmap.openSplit",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m",
+        "when": "editorLangId == markdown"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "mindmap.editor",
+        "displayName": "Mindmap Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          },
+          {
+            "filenamePattern": "*.markdown"
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "node esbuild.js --production",
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "mind-elixir": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.3.1"
+  }
+}
