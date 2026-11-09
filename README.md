@@ -44,7 +44,7 @@ Select a node first. A small toolbar then offers the most common actions.
 
 ## Limitations
 
-- **Copy and cut carry the heading only.** Paste creates a new heading without the section's text, so `Cmd/Ctrl+X` followed by paste loses that text unless you undo. To keep it, drag the node instead.
+- **Copy and paste carry the heading only.** A pasted node has no section text. To move a section with its text, drag the node. Cut is not available on the map, because it could lose that text.
 - **Headings stop at level 6.** An edit that would go deeper is refused with a message.
 - **Node text is raw Markdown.** A heading such as `## **Bold**` shows its asterisks on the map.
 - **Headings inside lists, quotes and HTML blocks** are treated as body text, not as nodes.

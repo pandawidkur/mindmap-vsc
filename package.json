@@ -2,7 +2,7 @@
   "name": "mind-md",
   "displayName": "mind.md",
   "description": "Edit the headings of a Markdown file as a mind map, without touching the rest of your text.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "pandawidkur",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -81,9 +81,11 @@
     "watch": "node esbuild.js --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "node esbuild.js --tests && node out/test/runTest.js"
+    "test:integration": "node esbuild.js --tests && node out/test/runTest.js",
+    "test:webview": "node esbuild.js --tests && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/markdown-it": "^14.2.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.11.0",

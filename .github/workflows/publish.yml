@@ -25,5 +25,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: xvfb-run -a npm run test:integration
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:webview
       - name: Publish to the VS Code Marketplace
         run: npx --yes @vscode/vsce@4 publish --oidc ${{ inputs.pre_release && '--pre-release' || '' }}

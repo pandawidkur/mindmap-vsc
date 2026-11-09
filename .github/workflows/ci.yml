@@ -33,5 +33,10 @@ jobs:
         run: xvfb-run -a npm run test:integration
         env:
           VSCODE_TEST_VERSION: ${{ matrix.vscode }}
+      - name: Webview tests
+        if: matrix.vscode == 'stable'
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:webview
       - name: Package
         run: npx --yes @vscode/vsce package

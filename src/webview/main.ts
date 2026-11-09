@@ -19,6 +19,8 @@ interface RawNode {
   id: string;
   topic: string;
   expanded?: boolean;
+  /** Which side of the root a top-level branch is on. */
+  direction?: number;
   children?: RawNode[];
 }
 
@@ -39,21 +41,32 @@ function isEditing(): boolean {
   return document.getElementById('input-box') !== null;
 }
 
-/** Copies folding from the nodes on screen, since the document does not store it. */
-function withCurrentFolding(tree: TreeNode, current: TreeNode | null): TreeNode {
-  const folding = new Map<string, boolean | undefined>();
-  const record = (node: TreeNode) => {
-    folding.set(node.id, node.expanded);
-    node.children.forEach(record);
+/**
+ * Copies what only the map knows, folding and branch sides, from the nodes on screen.
+ * The document stores neither. Without a side, the library would deal the branches out
+ * again by their order, so they could jump across the root on any text edit.
+ */
+function withCurrentViewState(tree: TreeNode, current: RawNode | null): RawNode {
+  const onScreen = new Map<string, RawNode>();
+  const record = (node: RawNode) => {
+    onScreen.set(node.id, node);
+    node.children?.forEach(record);
   };
   if (current) {
     record(current);
   }
-  const apply = (node: TreeNode): TreeNode => ({
-    ...node,
-    expanded: folding.has(node.id) ? folding.get(node.id) : true,
-    children: node.children.map(apply),
-  });
+  const apply = (node: TreeNode): RawNode => {
+    const previous = onScreen.get(node.id);
+    const merged: RawNode = {
+      ...node,
+      expanded: previous ? previous.expanded : true,
+      children: node.children.map(apply),
+    };
+    if (previous?.direction !== undefined) {
+      merged.direction = previous.direction;
+    }
+    return merged;
+  };
   return apply(tree);
 }
 
@@ -84,7 +97,8 @@ function createMap(tree: TreeNode): void {
     // Links are not offered, and neither are summaries (see style.css): Markdown cannot store them.
     contextMenu: { focus: false, link: false },
     toolBar: false,
-    keypress: true,
+    // Cut is switched off: it deletes a section, and paste brings back only its heading.
+    keypress: { x: () => {} },
     newTopicName: 'New node',
     allowUndo: false,
     theme: buildTheme(),
@@ -93,7 +107,15 @@ function createMap(tree: TreeNode): void {
   instance.init({ nodeData: tree });
   overlays = createOverlays(instance);
 
-  instance.bus.addListener('operation', () => bridge.localChange());
+  instance.bus.addListener('operation', (operation: { name: string }) => {
+    bridge.localChange();
+    if (operation.name.startsWith('moveNode')) {
+      // A dropped branch can land outside the view; the library only reveals on selection.
+      requestAnimationFrame(() => {
+        instance.currentNode?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
+    }
+  });
   onThemeChange(() => {
     keepingSelection(instance, () => instance.changeTheme(buildTheme(), true));
     overlays?.update();
@@ -113,9 +135,11 @@ const bridge = new SyncBridge({
       createMap(tree);
       return;
     }
-    const merged = withCurrentFolding(tree, readTree());
     const instance = me;
-    keepingSelection(instance, () => instance.refresh({ nodeData: merged }));
+    const merged = withCurrentViewState(tree, instance.getData().nodeData as RawNode);
+    keepingSelection(instance, () =>
+      instance.refresh({ nodeData: merged as Parameters<typeof instance.init>[0]['nodeData'] })
+    );
     overlays?.update();
   },
   isEditing,
