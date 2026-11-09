@@ -2,7 +2,7 @@
 
 Edit the headings of a Markdown file as a mind map, in VS Code. Your text stays where it is: changing a node rewrites only that heading, and everything else in the file keeps its exact bytes.
 
-![A mind map of a Markdown file, with the toolbar of the selected node](media/screenshot.png)
+![Editing a Markdown file as a mind map: renaming, adding and dragging nodes, and typing in the file](media/mind-md-demo.gif)
 
 ## Open a map
 

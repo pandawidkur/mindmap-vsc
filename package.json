@@ -2,7 +2,7 @@
   "name": "mind-md",
   "displayName": "mind.md",
   "description": "Edit the headings of a Markdown file as a mind map, without touching the rest of your text.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "pandawidkur",
   "license": "MIT",
   "icon": "media/icon.png",

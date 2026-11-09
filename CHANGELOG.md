@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Show an animated demo on the extension page.
+
 ## 0.1.0
 
 First public pre-release.
