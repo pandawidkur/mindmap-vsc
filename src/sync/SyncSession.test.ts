@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TreeNode } from '../core/model';
 import { applyChange, TextChange } from '../core/planEdit';
-import { HostMessage } from '../shared/protocol';
+import { HostMessage, MapLayout, SyncMessage } from '../shared/protocol';
 import { SessionPorts, SyncSession } from './SyncSession';
 
 function setup(initial: string) {
   const state = { text: initial, version: 1 };
   const posted: HostMessage[] = [];
+  const saved: { layout: MapLayout } = { layout: 'side' };
   const warnings: string[] = [];
   const confirmRemoval = vi.fn(async () => true);
   let session: SyncSession;
@@ -26,6 +27,12 @@ function setup(initial: string) {
     },
     view: { post: (message) => posted.push(message) },
     user: { confirmRemoval, warn: (message) => warnings.push(message) },
+    layout: {
+      get: () => saved.layout,
+      set: (layout) => {
+        saved.layout = layout;
+      },
+    },
   };
   session = new SyncSession(ports, 'FILE');
 
@@ -34,8 +41,9 @@ function setup(initial: string) {
     state.version += 1;
     session.documentChanged();
   };
-  const last = () => posted[posted.length - 1];
-  return { state, posted, warnings, ports, session, confirmRemoval, typeText, last };
+  const syncs = () => posted.filter((m): m is SyncMessage => m.type === 'sync');
+  const last = () => syncs()[syncs().length - 1];
+  return { saved, syncs, state, posted, warnings, ports, session, confirmRemoval, typeText, last };
 }
 
 function rename(tree: TreeNode, from: string, to: string): TreeNode {
@@ -86,16 +94,16 @@ describe('SyncSession', () => {
   });
 
   it('sends text edits to the map after the debounce, keeping ids', async () => {
-    const { session, posted, typeText, last } = setup('# R\n\n## A\n');
+    const { session, syncs, typeText, last } = setup('# R\n\n## A\n');
     await session.handleMessage({ type: 'ready' });
     const id = last().tree.children[0].id;
 
     typeText('# R\n\n## Ab\n');
     typeText('# R\n\n## Abc\n');
-    expect(posted).toHaveLength(1);
+    expect(syncs()).toHaveLength(1);
 
     await vi.advanceTimersByTimeAsync(200);
-    expect(posted).toHaveLength(2);
+    expect(syncs()).toHaveLength(2);
     expect(last().tree.children[0]).toMatchObject({ id, topic: 'Abc' });
   });
 
@@ -189,6 +197,36 @@ describe('SyncSession', () => {
     ports.history = vi.fn(async () => {});
     await session.handleMessage({ type: 'history', action: 'redo' });
     expect(ports.history).toHaveBeenCalledWith('redo');
+  });
+
+  it('sends the saved layout before the first state', async () => {
+    const { session, posted, saved } = setup('# R\n');
+    saved.layout = 'down';
+    await session.handleMessage({ type: 'ready' });
+    expect(posted[0]).toEqual({ type: 'layout', layout: 'down' });
+    expect(posted[1].type).toBe('sync');
+  });
+
+  it('saves a layout change and leaves the document alone', async () => {
+    const { session, posted, saved, state } = setup('# R\n');
+    await session.handleMessage({ type: 'setLayout', layout: 'down' });
+    expect(saved.layout).toBe('down');
+    expect(posted).toEqual([{ type: 'layout', layout: 'down' }]);
+    expect(state).toEqual({ text: '# R\n', version: 1 });
+  });
+
+  it('toggles between the layouts', async () => {
+    const { session, saved } = setup('# R\n');
+    await session.toggleLayout();
+    expect(saved.layout).toBe('down');
+    await session.toggleLayout();
+    expect(saved.layout).toBe('side');
+  });
+
+  it('ignores an unknown layout', async () => {
+    const { session, saved } = setup('# R\n');
+    await session.handleMessage({ type: 'setLayout', layout: 'diagonal' });
+    expect(saved.layout).toBe('side');
   });
 
   it('does nothing after dispose', async () => {

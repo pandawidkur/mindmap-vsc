@@ -21,7 +21,7 @@ html, body {
   background-color: var(--vscode-editor-background) !important;
 }
 
-me-tpc {
+.me-tpc {
   border-radius: 10px !important;
   padding: 8px 16px !important;
   font-size: 13px !important;
@@ -32,12 +32,12 @@ me-tpc {
   box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent) !important;
 }
 
-me-tpc.selected {
+.me-tpc.selected {
   outline: 2px solid var(--vscode-focusBorder) !important;
   outline-offset: 2px !important;
 }
 
-me-root > me-tpc {
+.me-root > .me-tpc {
   border-radius: 14px !important;
   padding: 10px 24px !important;
   font-size: 15px !important;
@@ -48,6 +48,30 @@ me-root > me-tpc {
 
 path.branch {
   stroke-width: 2.5px !important;
+}
+
+.mm-layout {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 10002;
+  padding: 4px 10px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-widget-border, var(--vscode-contrastBorder, transparent));
+  border-radius: 6px;
+  color: var(--vscode-foreground);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mm-layout:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.mm-layout:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
 }
 
 /* Markdown has nowhere to store a summary, and the library cannot switch this item off. */

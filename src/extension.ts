@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { HistoryAction } from './shared/protocol';
+import { HistoryAction, MapLayout } from './shared/protocol';
 import { SyncSession } from './sync/SyncSession';
 
 type ViewMode = 'panel' | 'editor';
@@ -13,13 +13,16 @@ export interface ExtensionApi {
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
   const sessions = new Map<string, SyncSession>();
+  const views = new Map<vscode.WebviewPanel, SyncSession>();
   const panels = new Map<string, vscode.WebviewPanel>();
 
   const attach = (panel: vscode.WebviewPanel, document: vscode.TextDocument, mode: ViewMode) => {
     const key = document.uri.toString();
-    const session = connectSession(panel, document, mode);
+    const session = connectSession(panel, document, mode, context.workspaceState);
     sessions.set(key, session);
+    views.set(panel, session);
     panel.onDidDispose(() => {
+      views.delete(panel);
       if (sessions.get(key) === session) {
         sessions.delete(key);
       }
@@ -61,6 +64,16 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     attach(panel, document, 'panel');
   });
 
+  const toggleLayout = vscode.commands.registerCommand('mindmap.toggleLayout', () => {
+    for (const [panel, session] of views) {
+      if (panel.active) {
+        return session.toggleLayout();
+      }
+    }
+    void vscode.window.showWarningMessage('Please select a mindmap first.');
+    return undefined;
+  });
+
   const customEditor = vscode.window.registerCustomEditorProvider(
     'mindmap.editor',
     {
@@ -74,7 +87,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }
   );
 
-  context.subscriptions.push(openBeside, customEditor);
+  context.subscriptions.push(openBeside, toggleLayout, customEditor);
   return { sessionFor: (uri) => sessions.get(uri.toString()) };
 }
 
@@ -116,8 +129,10 @@ async function runHistoryOnDocument(
 function connectSession(
   panel: vscode.WebviewPanel,
   document: vscode.TextDocument,
-  mode: ViewMode
+  mode: ViewMode,
+  state: vscode.Memento
 ): SyncSession {
+  const layoutKey = `mindmap.layout:${document.uri.toString()}`;
   const title = path.basename(document.fileName, path.extname(document.fileName)) || 'Mindmap';
   const session = new SyncSession(
     {
@@ -152,6 +167,10 @@ function connectSession(
         },
         warn: (message) => void vscode.window.showWarningMessage(message),
       },
+      layout: {
+        get: () => state.get<MapLayout>(layoutKey, 'side'),
+        set: (layout) => void state.update(layoutKey, layout),
+      },
       history:
         mode === 'panel' ? (action) => runHistoryOnDocument(action, document, panel) : undefined,
     },
@@ -174,6 +193,9 @@ function connectSession(
 
 function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, mode: ViewMode): string {
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview.js'));
+  const libraryStyleUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'dist', 'mind-elixir.css')
+  );
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'style.css'));
   const nonce = randomBytes(16).toString('base64');
   // The map library injects its stylesheet and positions nodes with inline styles.
@@ -190,6 +212,7 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, mode: Vie
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="${libraryStyleUri}">
   <link rel="stylesheet" href="${styleUri}">
   <title>Mindmap</title>
 </head>

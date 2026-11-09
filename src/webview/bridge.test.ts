@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { TreeNode } from '../core/model';
-import type { HostMessage, WebviewMessage } from '../shared/protocol';
+import type { SyncMessage, WebviewMessage } from '../shared/protocol';
 import { SyncBridge } from './bridge';
 
 const tree = (topic: string): TreeNode => ({
@@ -9,7 +9,7 @@ const tree = (topic: string): TreeNode => ({
   children: [{ id: 'a', topic, children: [] }],
 });
 
-const sync = (version: number, t: TreeNode, ack?: HostMessage['ack']): HostMessage => ({
+const sync = (version: number, t: TreeNode, ack?: SyncMessage['ack']): SyncMessage => ({
   type: 'sync',
   version,
   tree: t,

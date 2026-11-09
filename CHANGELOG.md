@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Add a top-down layout. Switch it from the button on the map or with **Toggle Mindmap Direction**. Each document keeps its direction in the workspace, never in the file.
+- Update the map library to mind-elixir 6.
+- Dragging the canvas with the left button pans the map. Dragging with the right button selects several nodes.
+
 ## 0.1.2
 
 - Branches stay on their side of the map when the file is edited.

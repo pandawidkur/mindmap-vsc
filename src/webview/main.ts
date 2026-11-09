@@ -1,7 +1,6 @@
 import MindElixir from 'mind-elixir';
-import type { MindElixirInstance } from 'mind-elixir';
 import type { TreeNode } from '../core/model';
-import type { HostMessage, WebviewMessage } from '../shared/protocol';
+import type { HostMessage, MapLayout, WebviewMessage } from '../shared/protocol';
 import { SyncBridge } from './bridge';
 import { createOverlays } from './overlays';
 import { buildTheme, onThemeChange } from './theme';
@@ -12,15 +11,20 @@ const vscode = acquireVsCodeApi();
 /** The side-by-side panel is not tied to the document, so undo must be requested. */
 const handlesHistory = document.body.dataset.mode === 'panel';
 
-let me: MindElixirInstance | null = null;
+let me: MindElixir | null = null;
+let layout: MapLayout = 'side';
 let overlays: { update(): void } | null = null;
+/** True while the library draws the map for the first time, which takes a moment. */
+let starting = false;
+/** The newest state that arrived during that moment. */
+let pendingTree: TreeNode | null = null;
 
 interface RawNode {
   id: string;
   topic: string;
   expanded?: boolean;
   /** Which side of the root a top-level branch is on. */
-  direction?: number;
+  direction?: 0 | 1;
   children?: RawNode[];
 }
 
@@ -70,18 +74,72 @@ function withCurrentViewState(tree: TreeNode, current: RawNode | null): RawNode 
   return apply(tree);
 }
 
-/** Runs a redraw, then selects again the node that was selected, if it still exists. */
-function keepingSelection(instance: MindElixirInstance, redraw: () => void): void {
-  const selected = instance.currentNode?.nodeObj.id;
+/** Runs a redraw, then selects again the nodes that were selected, if they still exist. */
+function keepingSelection(instance: MindElixir, redraw: () => void): void {
+  const selected = instance.currentNodes.map((node) => node.nodeObj.id);
   redraw();
-  if (selected === undefined) {
-    return;
+  const found = selected.flatMap((id) => {
+    try {
+      return [instance.findEle(id)];
+    } catch {
+      // The node is gone, or inside a folded branch.
+      return [];
+    }
+  });
+  // Not selectNode: that also pans to the node, and an update must not move the view.
+  if (found.length > 0) {
+    instance.selectNodes(found);
   }
-  try {
-    instance.selectNode(instance.findEle(selected));
-  } catch {
-    instance.unselectNode();
+}
+
+/** Pans just enough to show a node that ended up partly outside the view. */
+function reveal(instance: MindElixir, node: HTMLElement): void {
+  const margin = 8;
+  const box = node.getBoundingClientRect();
+  const view = instance.container.getBoundingClientRect();
+  const overflow = (start: number, end: number, viewStart: number, viewEnd: number) => {
+    if (start < viewStart + margin) {
+      return viewStart + margin - start;
+    }
+    return end > viewEnd - margin ? viewEnd - margin - end : 0;
+  };
+  const dx = overflow(box.left, box.right, view.left, view.right);
+  const dy = overflow(box.top, box.bottom, view.top, view.bottom);
+  if (dx !== 0 || dy !== 0) {
+    instance.move(dx, dy);
   }
+}
+
+function setLayout(next: MapLayout): void {
+  layout = next;
+  updateLayoutButton();
+  if (me && (me.direction === MindElixir.DOWN) !== (next === 'down')) {
+    const instance = me;
+    keepingSelection(instance, () => (next === 'down' ? instance.initDown() : instance.initSide()));
+    overlays?.update();
+  }
+}
+
+const layoutButton = document.createElement('button');
+layoutButton.type = 'button';
+layoutButton.className = 'mm-layout';
+layoutButton.addEventListener('mousedown', (event) => event.preventDefault());
+layoutButton.addEventListener('click', () => {
+  vscode.postMessage({ type: 'setLayout', layout: layout === 'side' ? 'down' : 'side' });
+});
+document.body.append(layoutButton);
+
+function updateLayoutButton(): void {
+  const label = layout === 'side' ? 'Top-down layout' : 'Side layout';
+  layoutButton.textContent = label;
+  layoutButton.setAttribute('aria-label', `Switch to ${label.toLowerCase()}`);
+}
+updateLayoutButton();
+
+function showTree(instance: MindElixir, tree: TreeNode): void {
+  const merged = withCurrentViewState(tree, instance.getData().nodeData as RawNode);
+  keepingSelection(instance, () => instance.refresh({ nodeData: merged }));
+  overlays?.update();
 }
 
 function createMap(tree: TreeNode): void {
@@ -89,41 +147,48 @@ function createMap(tree: TreeNode): void {
   if (!container) {
     return;
   }
-  const instance: MindElixirInstance = new MindElixir({
+  const instance = new MindElixir({
     el: container,
-    direction: MindElixir.SIDE,
-    draggable: true,
+    direction: layout === 'down' ? MindElixir.DOWN : MindElixir.SIDE,
     editable: true,
     // Links are not offered, and neither are summaries (see style.css): Markdown cannot store them.
     contextMenu: { focus: false, link: false },
     toolBar: false,
-    // Cut is switched off: it deletes a section, and paste brings back only its heading.
-    keypress: { x: () => {} },
+    keypress: true,
+    // Dragging the canvas with the left button pans; the right button selects an area.
+    mouseSelectionButton: 2,
     newTopicName: 'New node',
     allowUndo: false,
     theme: buildTheme(),
   });
-  me = instance;
-  instance.init({ nodeData: tree });
-  overlays = createOverlays(instance);
-
-  instance.bus.addListener('operation', (operation: { name: string }) => {
-    bridge.localChange();
-    if (operation.name.startsWith('moveNode')) {
-      // A dropped branch can land outside the view; the library only reveals on selection.
-      requestAnimationFrame(() => {
-        instance.currentNode?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      });
+  starting = true;
+  void instance.init({ nodeData: withCurrentViewState(tree, null) }).then(() => {
+    starting = false;
+    me = instance;
+    instance.bus.addListener('operation', (operation) => {
+      bridge.localChange();
+      if (operation.name.startsWith('moveNodes')) {
+        // A dropped branch can land outside the view; the library only reveals far-off nodes.
+        requestAnimationFrame(() => {
+          if (instance.currentNode) {
+            reveal(instance, instance.currentNode);
+          }
+        });
+      }
+    });
+    overlays = createOverlays(instance);
+    instance.scale(0.8);
+    instance.toCenter();
+    if (pendingTree) {
+      showTree(instance, pendingTree);
+      pendingTree = null;
     }
+    setLayout(layout);
   });
+
   onThemeChange(() => {
     keepingSelection(instance, () => instance.changeTheme(buildTheme(), true));
     overlays?.update();
-  });
-
-  requestAnimationFrame(() => {
-    instance.scale(0.8);
-    instance.toCenter();
   });
 }
 
@@ -131,16 +196,13 @@ const bridge = new SyncBridge({
   post: (message) => vscode.postMessage(message),
   readTree,
   render(tree) {
-    if (!me) {
+    if (me) {
+      showTree(me, tree);
+    } else if (starting) {
+      pendingTree = tree;
+    } else {
       createMap(tree);
-      return;
     }
-    const instance = me;
-    const merged = withCurrentViewState(tree, instance.getData().nodeData as RawNode);
-    keepingSelection(instance, () =>
-      instance.refresh({ nodeData: merged as Parameters<typeof instance.init>[0]['nodeData'] })
-    );
-    overlays?.update();
   },
   isEditing,
 });
@@ -148,6 +210,8 @@ const bridge = new SyncBridge({
 window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
   if (event.data?.type === 'sync') {
     bridge.receive(event.data);
+  } else if (event.data?.type === 'layout') {
+    setLayout(event.data.layout);
   }
 });
 
@@ -161,6 +225,19 @@ document.addEventListener(
         bridge.editingEnded();
         overlays?.update();
       });
+    }
+  },
+  true
+);
+
+// Cut deletes a section, and paste would bring back only its heading. Inside the text box
+// of a node, cut is ordinary text editing and stays available.
+document.addEventListener(
+  'cut',
+  (event) => {
+    if ((event.target as Element | null)?.id !== 'input-box') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
     }
   },
   true

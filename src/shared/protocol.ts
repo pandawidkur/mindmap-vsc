@@ -2,19 +2,25 @@ import type { TreeNode } from '../core/model';
 
 export type HistoryAction = 'undo' | 'redo';
 
+/** How the map is laid out: branches to both sides, or growing downward. */
+export type MapLayout = 'side' | 'down';
+
 export type WebviewMessage =
   | { type: 'ready' }
   /** The map changed; `baseVersion` is the document version it was based on. */
   | { type: 'edit'; seq: number; baseVersion: number; tree: TreeNode }
-  | { type: 'history'; action: HistoryAction };
+  | { type: 'history'; action: HistoryAction }
+  | { type: 'setLayout'; layout: MapLayout };
 
-export interface HostMessage {
+export interface SyncMessage {
   type: 'sync';
   version: number;
   tree: TreeNode;
   /** Set when this message answers an edit from the map. */
   ack?: { seq: number; applied: boolean };
 }
+
+export type HostMessage = SyncMessage | { type: 'layout'; layout: MapLayout };
 
 const MAX_NODES = 50_000;
 const MAX_DEPTH = 64;
@@ -60,6 +66,10 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | null {
     case 'history':
       return message.action === 'undo' || message.action === 'redo'
         ? { type: 'history', action: message.action }
+        : null;
+    case 'setLayout':
+      return message.layout === 'side' || message.layout === 'down'
+        ? { type: 'setLayout', layout: message.layout }
         : null;
     case 'edit': {
       const tree = parseTree(message.tree);

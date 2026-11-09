@@ -19,6 +19,19 @@ Text of alpha.
 Text of beta.
 `;
 
+const LAYOUT = `# Launch plan
+
+## Research
+
+Talk to five users first.
+
+## Build
+
+## Release
+
+Write the changelog.
+`;
+
 /** Rejects everything the page reports as an error, including CSP violations. */
 async function openMap(page: Page, doc = DOC): Promise<void> {
   page.on('console', (message) => {
@@ -33,7 +46,7 @@ async function openMap(page: Page, doc = DOC): Promise<void> {
     (window as unknown as { __doc: string }).__doc = text;
   }, doc);
   await page.goto(PAGE);
-  await page.waitForSelector('me-tpc');
+  await page.waitForSelector('.me-tpc');
   await mapSettled(page);
 }
 
@@ -41,7 +54,7 @@ async function openMap(page: Page, doc = DOC): Promise<void> {
 async function mapSettled(page: Page): Promise<void> {
   const position = () =>
     page.evaluate(() => {
-      const box = document.querySelector('me-tpc')!.getBoundingClientRect();
+      const box = document.querySelector('.me-tpc')!.getBoundingClientRect();
       return `${box.x},${box.y},${box.width}`;
     });
   let previous = await position();
@@ -66,7 +79,7 @@ const typeInEditor = (page: Page, text: string) =>
   }, text);
 
 function node(page: Page, topic: string) {
-  return page.locator('me-tpc', { hasText: new RegExp(`^${topic}$`) });
+  return page.locator('.me-tpc', { hasText: new RegExp(`^${topic}$`) });
 }
 
 /** Waits for the debounced update of a text edit to reach the map. */
@@ -105,7 +118,7 @@ test.describe('editing on the map', () => {
   test.beforeEach(({ page }) => openMap(page));
 
   test('renaming changes only the heading', async ({ page }) => {
-    await node(page, 'Beta').dblclick();
+    await node(page, 'Beta').dblclick({ delay: 20 });
     await renameSelected(page, 'Gamma');
     expect(await docText(page)).toBe(DOC.replace('## Beta', '## Gamma'));
   });
@@ -124,7 +137,7 @@ test.describe('editing on the map', () => {
   });
 
   test('closing the text box without a change sends nothing', async ({ page }) => {
-    await node(page, 'Beta').dblclick();
+    await node(page, 'Beta').dblclick({ delay: 20 });
     await page.waitForSelector('#input-box');
     await page.keyboard.press('Enter');
     await page.waitForTimeout(100);
@@ -190,17 +203,38 @@ test.describe('toolbar and menu', () => {
 
   test('follows the map when it pans', async ({ page }) => {
     await node(page, 'Beta').click();
-    const before = (await toolbar(page).boundingBox())!;
-    await page.evaluate(() => {
-      document.querySelector('.map-container')!.scrollTop += 60;
-    });
-    await page.waitForTimeout(50);
-    const after = (await toolbar(page).boundingBox())!;
-    expect(before.y - after.y).toBeCloseTo(60, 0);
+    await expect(toolbar(page)).toBeVisible();
+    const gap = async () => {
+      const bar = (await toolbar(page).boundingBox())!;
+      const target = (await node(page, 'Beta').boundingBox())!;
+      return { gap: target.y - bar.y, y: target.y };
+    };
+    const before = await gap();
+    await page.mouse.move(100, 100);
+    await page.mouse.wheel(0, 60);
+    await page.waitForTimeout(100);
+    const after = await gap();
+    expect(after.y).not.toBeCloseTo(before.y, 0);
+    expect(after.gap).toBeCloseTo(before.gap, 0);
+  });
+
+  test('dragging the canvas pans the map, and the toolbar follows', async ({ page }) => {
+    await node(page, 'Root').click();
+    await expect(toolbar(page)).toBeVisible();
+    const before = (await node(page, 'Beta').boundingBox())!;
+    await page.mouse.move(40, 500);
+    await page.mouse.down();
+    await page.mouse.move(140, 440, { steps: 8 });
+    await page.mouse.up();
+    await mapSettled(page);
+    const after = (await node(page, 'Beta').boundingBox())!;
+    expect(after.x - before.x).toBeCloseTo(100, 0);
+    expect(after.y - before.y).toBeCloseTo(-60, 0);
+    expect(await docText(page)).toBe(DOC);
   });
 
   test('hides while a node is being edited', async ({ page }) => {
-    await node(page, 'Beta').dblclick();
+    await node(page, 'Beta').dblclick({ delay: 20 });
     await page.waitForSelector('#input-box');
     await expect(toolbar(page)).toBeHidden();
     await page.keyboard.press('Enter');
@@ -223,6 +257,7 @@ test.describe('toolbar and menu', () => {
 
   test('the context menu has no action Markdown cannot store', async ({ page }) => {
     await node(page, 'Beta').click({ button: 'right' });
+    await expect(page.locator('.menu-list li:visible').first()).toBeVisible();
     const items = await page.locator('.menu-list li:visible').evaluateAll((list) =>
       list.map((item) => item.id)
     );
@@ -242,21 +277,18 @@ test.describe('updates from the text editor', () => {
   test('keep the selection, the toolbar and the viewport', async ({ page }) => {
     await node(page, 'Beta').click();
     const scroll = () =>
-      page.evaluate(() => {
-        const map = document.querySelector('.map-container')!;
-        return [map.scrollLeft, map.scrollTop];
-      });
+      page.evaluate(() => (document.querySelector('.map-canvas') as HTMLElement).style.transform);
     const before = await scroll();
     await typeInEditor(page, DOC.replace('# Root', '# Renamed root'));
     await afterTextEdit(page);
-    await expect(page.locator('me-tpc.selected')).toHaveText('Beta');
+    await expect(page.locator('.me-tpc.selected')).toHaveText('Beta');
     await expect(toolbar(page)).toBeVisible();
     expect(await scroll()).toEqual(before);
   });
 
   test('keep folded branches folded', async ({ page }) => {
     await node(page, 'Alpha').click();
-    await page.locator('me-parent:has(me-tpc:has-text("Alpha")) me-epd').first().click();
+    await page.locator('.me-parent:has(.me-tpc:has-text("Alpha")) .me-epd').first().click();
     await expect(node(page, 'Alpha one')).toHaveCount(0);
     await typeInEditor(page, DOC.replace('# Root', '# Renamed root'));
     await afterTextEdit(page);
@@ -265,7 +297,7 @@ test.describe('updates from the text editor', () => {
   });
 
   test('do not close the text box of a node being edited', async ({ page }) => {
-    await node(page, 'Beta').dblclick();
+    await node(page, 'Beta').dblclick({ delay: 20 });
     await page.waitForSelector('#input-box');
     await typeInEditor(page, DOC.replace('# Root', '# Renamed root'));
     await afterTextEdit(page);
@@ -274,25 +306,13 @@ test.describe('updates from the text editor', () => {
 });
 
 test.describe('layout after a drag (#3)', () => {
-  const LAYOUT = `# Launch plan
-
-## Research
-
-Talk to five users first.
-
-## Build
-
-## Release
-
-Write the changelog.
-`;
 
   test.use({ viewport: { width: 696, height: 560 } });
 
   test.beforeEach(async ({ page }) => {
     await openMap(page, LAYOUT);
     // Zoom to 100%, where the map fills this narrow view.
-    await page.mouse.click(680, 20);
+    await page.mouse.click(680, 540);
     await page.keyboard.press('Control++');
     await mapSettled(page);
   });
@@ -327,10 +347,101 @@ Write the changelog.
   });
 });
 
+test.describe('top-down layout (#5)', () => {
+  const layoutButton = (page: Page) => page.locator('.mm-layout');
+
+  test('switches from the button without touching the file', async ({ page }) => {
+    await openMap(page);
+    const childY = async () => (await node(page, 'Beta').boundingBox())!.y;
+    const rootY = async () => (await node(page, 'Root').boundingBox())!.y;
+    await expect(layoutButton(page)).toHaveText('Top-down layout');
+    await layoutButton(page).click();
+    await mapSettled(page);
+    await expect(layoutButton(page)).toHaveText('Side layout');
+    expect(await childY()).toBeGreaterThan((await rootY()) + 10);
+    expect(await docText(page)).toBe(DOC);
+    expect(await host(page, (h) => h.layout)).toBe('down');
+
+    await layoutButton(page).click();
+    await mapSettled(page);
+    expect(Math.abs((await childY()) - (await rootY()))).toBeLessThan(40);
+    expect(await host(page, (h) => h.layout)).toBe('side');
+  });
+
+  test('switching there and back keeps the branches on their sides', async ({ page }) => {
+    await openMap(page, LAYOUT);
+    await drag(page, 'Research', 'Release');
+    const sides = async () =>
+      Promise.all(['Build', 'Release'].map((topic) => sideOf(page, topic)));
+    const before = await sides();
+    await layoutButton(page).click();
+    await mapSettled(page);
+    await layoutButton(page).click();
+    await mapSettled(page);
+    expect(await sides()).toEqual(before);
+  });
+
+  test('keeps the selection and the toolbar when switching', async ({ page }) => {
+    await openMap(page);
+    await node(page, 'Beta').click();
+    await layoutButton(page).click();
+    await mapSettled(page);
+    await expect(page.locator('.me-tpc.selected')).toHaveText('Beta');
+    await expect(toolbar(page)).toBeVisible();
+    const box = (await node(page, 'Beta').boundingBox())!;
+    const plus = (await page.locator('.mm-quick-add').boundingBox())!;
+    expect(plus.y).toBeGreaterThanOrEqual(box.y + box.height);
+  });
+
+  test.describe('when saved', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript(() => {
+        (window as unknown as { __layout: string }).__layout = 'down';
+      });
+      await openMap(page);
+    });
+
+    test('opens in that layout', async ({ page }) => {
+      await expect(layoutButton(page)).toHaveText('Side layout');
+      const child = (await node(page, 'Beta').boundingBox())!;
+      const root = (await node(page, 'Root').boundingBox())!;
+      expect(child.y).toBeGreaterThan(root.y + 10);
+    });
+
+    test('stays in it after a text edit, keeping the selection', async ({ page }) => {
+      await node(page, 'Beta').click();
+      await typeInEditor(page, DOC.replace('# Root', '# Renamed root'));
+      await afterTextEdit(page);
+      await expect(node(page, 'Renamed root')).toHaveCount(1);
+      await expect(page.locator('.me-tpc.selected')).toHaveText('Beta');
+      const child = (await node(page, 'Beta').boundingBox())!;
+      const root = (await node(page, 'Renamed root').boundingBox())!;
+      expect(child.y).toBeGreaterThan(root.y + 10);
+    });
+
+    test('adds, renames and removes nodes', async ({ page }) => {
+      await node(page, 'Beta').click();
+      await expect(toolbar(page)).toBeVisible();
+      await page.keyboard.press('Tab');
+      await renameSelected(page, 'Beta one');
+      expect(await docText(page)).toContain('Text of beta.\n\n### Beta one\n');
+      await node(page, 'Beta one').click();
+      await toolbarButton(page, 'Delete').click();
+      await expect(node(page, 'Beta one')).toHaveCount(0);
+      expect(await docText(page)).toBe(DOC);
+    });
+
+    test('drags a section with its text', async ({ page }) => {
+      await drag(page, 'Beta', 'Alpha one');
+      expect(await docText(page)).toContain('#### Beta\n\nText of beta.\n');
+    });
+  });
+});
+
 test('a refused map edit restores the map', async ({ page }) => {
   const synthetic = '## One\n\n## Two\n';
   await openMap(page, synthetic);
-  await node(page, 'notes').dblclick();
+  await node(page, 'notes').dblclick({ delay: 20 });
   await renameSelected(page, 'Other');
   await expect(node(page, 'notes')).toHaveCount(1);
   expect(await docText(page)).toBe(synthetic);
@@ -346,7 +457,7 @@ test('colors follow a theme change and keep the selection', async ({ page }) => 
     document.body.className = 'vscode-light';
   });
   await page.waitForTimeout(150);
-  await expect(page.locator('me-tpc.selected')).toHaveText('Beta');
+  await expect(page.locator('.me-tpc.selected')).toHaveText('Beta');
   await expect(node(page, 'Beta')).toHaveCSS('color', 'rgb(51, 51, 51)');
   await expect(page.locator('.map-container')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 });

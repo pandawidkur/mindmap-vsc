@@ -2,6 +2,7 @@
 !dist/extension.js
 !dist/webview.js
 !dist/style.css
+!dist/mind-elixir.css
 !media/icon.png
 !package.json
 !README.md
