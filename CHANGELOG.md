@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Branches stay on their side of the map when the file is edited.
+- A dragged node stays in view.
+- Remove cut from the map, because it could lose a section's text. Drag a node to move it with its text.
+
 ## 0.1.1
 
 - Show an animated demo on the extension page.

@@ -45,6 +45,14 @@ async function build() {
       target: 'node18',
       sourcemap: true,
     });
+    configs.push({
+      entryPoints: ['src/test/webview/host.ts'],
+      bundle: true,
+      outfile: 'out/test/webview/host.js',
+      format: 'iife',
+      platform: 'browser',
+      target: 'es2022',
+    });
   }
 
   if (isWatch) {

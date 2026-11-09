@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- The extension's policy, with file: standing in for the webview's resource origin. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src file: 'unsafe-inline'; script-src 'nonce-test'; img-src file: data:;">
+  <link rel="stylesheet" href="../../../dist/style.css">
+</head>
+<body data-mode="panel" class="vscode-dark" style="--vscode-font-family: Arial, sans-serif; --vscode-foreground: #cccccc; --vscode-editor-background: #1e1e1e; --vscode-editor-foreground: #d4d4d4; --vscode-editorWidget-background: #252526; --vscode-button-background: #0e639c; --vscode-button-foreground: #ffffff; --vscode-focusBorder: #007fd4; --vscode-charts-blue: #3794ff; --vscode-charts-green: #89d185;">
+  <div id="map"></div>
+  <script nonce="test" src="../../../out/test/webview/host.js"></script>
+  <script nonce="test" src="../../../dist/webview.js"></script>
+</body>
+</html>
