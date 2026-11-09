@@ -203,6 +203,23 @@ suite('Mindmap in a real editor', () => {
     assert.strictEqual(mapTabs(), 1);
   });
 
+  test('the direction command acts on the open map and survives reopening it', async () => {
+    const { uri, document, session } = await openBeside(DOC);
+    assert.strictEqual(session.layout, 'side');
+    await vscode.commands.executeCommand('mindmap.toggleLayout');
+    assert.strictEqual(session.layout, 'down');
+    assert.strictEqual(document.getText(), DOC);
+    assert.strictEqual(document.isDirty, false);
+
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const extension = await api();
+    await waitFor(() => !extension.sessionFor(uri), 'the session to end');
+
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+    await vscode.commands.executeCommand('mindmap.openSplit');
+    assert.strictEqual((await connected(uri)).layout, 'down');
+  });
+
   test('closing the document closes its panel', async () => {
     const { uri, document } = await openBeside(DOC);
     await vscode.window.showTextDocument(document, vscode.ViewColumn.One);

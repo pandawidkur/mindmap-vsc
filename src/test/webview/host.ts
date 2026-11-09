@@ -1,5 +1,5 @@
 import { applyChange } from '../../core/planEdit';
-import { HistoryAction, WebviewMessage } from '../../shared/protocol';
+import { HistoryAction, MapLayout, WebviewMessage } from '../../shared/protocol';
 import { SyncSession } from '../../sync/SyncSession';
 
 /** Stands in for the extension host: a real SyncSession over an in-memory document. */
@@ -9,12 +9,14 @@ interface TestHost {
   type(text: string): void;
   history: HistoryAction[];
   warnings: string[];
+  layout: MapLayout;
   /** Answer to the "delete a section with text" question. */
   confirmRemoval: boolean;
 }
 
 const testWindow = window as unknown as {
   __doc: string;
+  __layout?: MapLayout;
   __host: TestHost;
   acquireVsCodeApi(): { postMessage(message: WebviewMessage): void };
 };
@@ -30,6 +32,7 @@ const host: TestHost = {
   },
   history: [],
   warnings: [],
+  layout: testWindow.__layout ?? 'side',
   confirmRemoval: true,
 };
 
@@ -51,6 +54,12 @@ const session: SyncSession = new SyncSession(
     user: {
       confirmRemoval: async () => host.confirmRemoval,
       warn: (message) => host.warnings.push(message),
+    },
+    layout: {
+      get: () => host.layout,
+      set: (layout) => {
+        host.layout = layout;
+      },
     },
     history: async (action) => {
       host.history.push(action);

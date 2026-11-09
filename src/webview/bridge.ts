@@ -1,5 +1,5 @@
 import type { TreeNode } from '../core/model';
-import type { HostMessage, WebviewMessage } from '../shared/protocol';
+import type { SyncMessage, WebviewMessage } from '../shared/protocol';
 
 export interface BridgePorts {
   post(message: WebviewMessage): void;
@@ -31,7 +31,7 @@ export class SyncBridge {
 
   constructor(private readonly ports: BridgePorts) {}
 
-  receive(message: HostMessage): void {
+  receive(message: SyncMessage): void {
     if (this.inFlight !== null && message.ack?.seq !== this.inFlight) {
       // The answer to the edit in flight is coming and will carry the newest state.
       return;

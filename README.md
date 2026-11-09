@@ -22,6 +22,10 @@ Each document gets one side panel, which closes when you close the document.
 - **Both sides stay in sync.** Text edits appear on the map, keeping your selection and folded branches. If the file changes while you edit the map, that map edit is refused with a warning rather than overwriting the newer text.
 - **Files stay the way they were.** Line endings and heading styles are kept. A setext heading (underlined with `===` or `---`) becomes a `#` heading only when its level changes.
 
+## Choose a direction
+
+Use the **Top-down layout** button at the top right of the map to let branches grow downward instead of to both sides, or run **Toggle Mindmap Direction** from the Command Palette. VS Code remembers the direction for each document in the workspace. It is never written to the file.
+
 ## Keyboard and mouse
 
 Select a node first. A small toolbar then offers the most common actions.
@@ -38,6 +42,7 @@ Select a node first. A small toolbar then offers the most common actions.
 - `Cmd/Ctrl+Z` and `Cmd/Ctrl+Shift+Z`: undo and redo
 - Drag a node: move it
 - Drag the canvas or scroll: pan
+- Drag the canvas with the right button: select several nodes
 - `Cmd/Ctrl` + scroll, or `Cmd/Ctrl` + `+` and `-`: zoom
 - `Cmd/Ctrl+0`: reset the zoom
 - `F1`: center the map

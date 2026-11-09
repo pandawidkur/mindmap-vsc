@@ -1,6 +1,12 @@
 import { createModel, DocumentModel, modelToTree, TreeNode } from '../core/model';
 import { planTreeEdit, RejectionReason, TextChange } from '../core/planEdit';
-import { HistoryAction, HostMessage, parseWebviewMessage, WebviewMessage } from '../shared/protocol';
+import {
+  HistoryAction,
+  HostMessage,
+  MapLayout,
+  parseWebviewMessage,
+  WebviewMessage,
+} from '../shared/protocol';
 
 const TEXT_EDIT_DEBOUNCE_MS = 200;
 
@@ -14,6 +20,11 @@ export interface SessionPorts {
   user: {
     confirmRemoval(sections: number): Promise<boolean>;
     warn(message: string): void;
+  };
+  /** The saved layout, kept outside the document so its text stays clean. */
+  layout: {
+    get(): MapLayout;
+    set(layout: MapLayout): void;
   };
   /** Runs undo or redo on the document; absent when VS Code routes those natively. */
   history?: (action: HistoryAction) => Promise<void>;
@@ -76,6 +87,16 @@ export class SyncSession {
     }, TEXT_EDIT_DEBOUNCE_MS);
   }
 
+  get layout(): MapLayout {
+    return this.ports.layout.get();
+  }
+
+  /** Switches between the two layouts, as the map's own button does. */
+  toggleLayout(): Promise<void> {
+    const next = this.ports.layout.get() === 'side' ? 'down' : 'side';
+    return this.handleMessage({ type: 'setLayout', layout: next });
+  }
+
   /** The state last derived from the document. */
   snapshot(): { version: number; tree: TreeNode } {
     this.refreshModel();
@@ -97,8 +118,13 @@ export class SyncSession {
   private async dispatch(message: WebviewMessage): Promise<void> {
     switch (message.type) {
       case 'ready':
+        this.ports.view.post({ type: 'layout', layout: this.ports.layout.get() });
         this.post();
         this.markReady();
+        return;
+      case 'setLayout':
+        this.ports.layout.set(message.layout);
+        this.ports.view.post({ type: 'layout', layout: message.layout });
         return;
       case 'history':
         await this.ports.history?.(message.action);

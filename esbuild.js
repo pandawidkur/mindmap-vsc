@@ -8,6 +8,7 @@ const withTests = process.argv.includes('--tests');
 async function build() {
   fs.mkdirSync('dist', { recursive: true });
   fs.copyFileSync('src/webview/style.css', 'dist/style.css');
+  fs.copyFileSync('node_modules/mind-elixir/dist/MindElixir.css', 'dist/mind-elixir.css');
 
   const configs = [
     {

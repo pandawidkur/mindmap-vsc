@@ -130,7 +130,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 ```
 
-## mind-elixir 4.6.2
+## mind-elixir 6.0.0
 
 License: MIT
 

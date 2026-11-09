@@ -2,7 +2,7 @@
   "name": "mind-md",
   "displayName": "mind.md",
   "description": "Edit the headings of a Markdown file as a mind map, without touching the rest of your text.",
-  "version": "0.1.2",
+  "version": "0.3.0",
   "publisher": "pandawidkur",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -40,6 +40,11 @@
         "command": "mindmap.openSplit",
         "title": "Open Mindmap Beside",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "mindmap.toggleLayout",
+        "title": "Toggle Mindmap Direction",
+        "icon": "$(arrow-swap)"
       }
     ],
     "menus": {
@@ -48,6 +53,12 @@
           "when": "resourceExtname == .md || resourceExtname == .markdown",
           "command": "mindmap.openSplit",
           "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mindmap.toggleLayout",
+          "when": "activeWebviewPanelId == mindmapBeside || activeCustomEditorId == mindmap.editor"
         }
       ]
     },
@@ -94,7 +105,7 @@
     "esbuild": "^0.20.0",
     "fast-check": "^3.23.2",
     "markdown-it": "^14.3.3",
-    "mind-elixir": "^4.6.2",
+    "mind-elixir": "^6.0.0",
     "mocha": "^10.8.2",
     "typescript": "^5.3.3",
     "vitest": "^1.3.1"
